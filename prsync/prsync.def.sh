@@ -10,7 +10,9 @@ function prsync__get_remote_env {
 
     # Warning: 'local' counts as a command for the purposes of $?,
     #          whereas pure variable assignment does not.
-    remote_env_val="$(ssh $remote_port_options "$prsync__remote" "env | grep '^$remote_env_var=' | sed 's/^$remote_env_var=//'")"
+    local err="error: remote must be specified in the profile config to use \`prsync__get_remote_env\`"
+    remote_env_val="$(ssh $remote_port_options "${prsync__remote:?$err}" "env | grep '^$remote_env_var=' | sed 's/^$remote_env_var=//'")"
+
     local result="$?"
     printf '%s' "$remote_env_val"
     return "$result"
