@@ -124,24 +124,33 @@ function prsync {
         printf '%s\n' "error: src and dest cannot both be remote"
         return 1
     elif [ "$prsync__remote_dir1" != '' ]; then
-        dir1="$prsync__remote:$prsync__remote_dir1"
-        dir2="$prsync__dir2"
+        err="error: remote must be specified in the profile config, as dir1 is remote"
+        dir1="${prsync__remote:?$err}:$prsync__remote_dir1"
+
+        err="error: dir2 must be specified in the profile config and not be remote, as dir1 is remote"
+        dir2="${prsync__dir2:?$err}"
 
         case "$direction" in
             'to') src_copy="prsync__get_remote_files" && dest_copy="cp";;
             'from') src_copy="cp" && dest_copy="prsync__get_remote_files";;
         esac
     elif [ "$prsync__remote_dir2" != '' ]; then
-        dir1="$prsync__dir1"
-        dir2="$prsync__remote:$prsync__remote_dir2"
+        err="error: dir1 must be specified in the profile config and not be remote, as dir2 is remote"
+        dir1="${prsync__dir1:?$err}"
+
+        err="error: remote must be specified in the profile config, as dir1 is remote"
+        dir2="${prsync__remote:?$err}:$prsync__remote_dir2"
 
         case "$direction" in
             'to') src_copy="cp" && dest_copy="prsync__get_remote_files";;
             'from') src_copy="prsync__get_remote_files" && dest_copy="cp";;
         esac
     else
-        dir1="$prsync__dir1"
-        dir2="$prsync__dir2"
+        err="error: dir1 must be specified in the profile config"
+        dir1="${prsync__dir1:?$err}"
+
+        err="error: dir2 must be specified in the profile config"
+        dir2="${prsync__dir2:?$err}"
 
         src_copy="cp" && dest_copy="cp"
     fi
