@@ -1,4 +1,5 @@
 prsync__profiles_path=".prsync-profiles"
+prsync__log_path="$HOME/tmp"
 
 # To be used by profiles
 function prsync__get_remote_env {
@@ -186,5 +187,5 @@ function prsync {
        --include-from="$collated_profile_path"/{src,dest}-include \
        --exclude='*' \
        {"$src","$dest"}/ \
-       &> "$HOME/tmp/$direction - $profile.txt"
+       &> "$prsync__log_path/$direction - $profile.txt"
 }
