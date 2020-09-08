@@ -198,14 +198,14 @@ function prsync {
     local remote_options="${prsync__remote:+--partial}"
     local remote_port_options=''
     test "$prsync__remote_port" != '' &&
-        # An array, because these shouldn't be IFS-split after variable expansion
         remote_port_options=('-e' "ssh -p $prsync__remote_port")
 
     # Sync
     rsync \
        $(test "$write_" = false && printf '%s' '-n') \
-       $remote_options "${remote_port_options[@]}" \
-       $prsync__options \
+       `# Use arrays to avoid IFS-splitting after variable expansion` \
+       "${remote_options[@]}" "${remote_port_options[@]}" \
+       "${prsync__options[@]}" \
        --exclude-from="$collated_profile_path"/{src,dest}-exclude \
        --include-from="$collated_profile_path"/{src,dest}-include \
        --exclude='*' \
