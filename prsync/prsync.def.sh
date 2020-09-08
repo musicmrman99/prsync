@@ -76,6 +76,9 @@ function prsync {
 
     # ------------------------------------------------------------
 
+    # Used throughout to store error messages for unset/null parameter expansion
+    local err
+
     # Options
     local help=false
     local write_=false # Do not write by default (`rsync -n` is default)
