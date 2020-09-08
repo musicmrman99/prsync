@@ -44,16 +44,16 @@ function prsync__get_remote_files {
 }
 
 # Reset all variables that can be set in a prsync profile to *blank*
-function prsync__reset_profile_vars {
-    prsync__remote=''
-    prsync__remote_port=''
+function prsync__unset_profile_vars {
+    unset prsync__remote
+    unset prsync__remote_port
 
-    prsync__dir1=''
-    prsync__dir2=''
-    prsync__remote_dir1=''
-    prsync__remote_dir2=''
+    unset prsync__dir1
+    unset prsync__dir2
+    unset prsync__remote_dir1
+    unset prsync__remote_dir2
 
-    prsync__options=''
+    unset prsync__options
 }
 
 # # 'profile rsync'
@@ -126,7 +126,7 @@ function prsync {
 
     # Load profile from your home profiles (which may or may not be your
     # dir1's or dir2's profiles)
-    prsync__reset_profile_vars
+    prsync__unset_profile_vars
     . "$HOME/$prsync__profiles_path/$profile/profile"
 
     # Verify the configuration and extract variables
