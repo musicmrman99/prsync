@@ -19,9 +19,27 @@ function prsync__get_remote_env {
 }
 
 # To be used by profiles
-function prsync__get_remote_files {
+# Also used below to fetch files from the remote profile, if there is one
+function prsync__get_remote_files_raw {
     local remote_port_options="${prsync__remote_port:+-P $prsync__remote_port}"
     scp -q $remote_port_options "$@"
+    return $?
+}
+
+# To be used by profiles
+function prsync__get_remote_files {
+    # Extract first to second-last parameters (edited from https://stackoverflow.com/a/44939917)
+    # Notes:
+    # - slicing an array: https://stackoverflow.com/a/1336245
+    # - slicing the positional parameter arrays ($* and $@) does not require @-indexing the array (from a comment on the above)
+    # - experimentation: when run, "${@::N}" (where N is some number) returns 'bash' as the first param - exclude it
+    local all_but_last=("${@:1:${#@}-1}")
+
+    local err="error: remote must be specified in the profile config to use \`prsync__get_remote_env\`"
+
+    # Prefix "$prsync__remote:" to all elements in all_but_last (edited from https://stackoverflow.com/a/12744170)
+    # Get last parameter (https://stackoverflow.com/a/9970224)
+    prsync__get_remote_files_raw "${all_but_last[@]/#/${prsync__remote:?$err}:}" "${!#}"
     return $?
 }
 
@@ -133,8 +151,8 @@ function prsync {
         dir2="${prsync__dir2:?$err}"
 
         case "$direction" in
-            'to') src_copy="prsync__get_remote_files" && dest_copy="cp";;
-            'from') src_copy="cp" && dest_copy="prsync__get_remote_files";;
+            'to') src_copy="prsync__get_remote_files_raw" && dest_copy="cp";;
+            'from') src_copy="cp" && dest_copy="prsync__get_remote_files_raw";;
         esac
     elif [ "$prsync__remote_dir2" != '' ]; then
         err="error: dir1 must be specified in the profile config and not be remote, as dir2 is remote"
@@ -144,8 +162,8 @@ function prsync {
         dir2="${prsync__remote:?$err}:$prsync__remote_dir2"
 
         case "$direction" in
-            'to') src_copy="cp" && dest_copy="prsync__get_remote_files";;
-            'from') src_copy="prsync__get_remote_files" && dest_copy="cp";;
+            'to') src_copy="cp" && dest_copy="prsync__get_remote_files_raw";;
+            'from') src_copy="prsync__get_remote_files_raw" && dest_copy="cp";;
         esac
     else
         err="error: dir1 must be specified in the profile config"
