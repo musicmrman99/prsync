@@ -14,7 +14,6 @@ function prsync__get_remote_env {
     #          whereas pure variable assignment does not.
     remote_env_val="$(ssh $remote_port_options "$prsync__remote" "env | grep '^$remote_env_var=' | sed 's/^$remote_env_var=//'")"
     local result="$?"
-    printf '%s\n' "$remote_env_val" 1>2
     printf '%s' "$remote_env_val"
     return "$result"
 }
