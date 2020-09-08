@@ -6,9 +6,7 @@ function prsync__get_remote_env {
     local remote_env_var="$1"
     local remote_env_val
 
-    local remote_port_options=''
-    test "$prsync__remote_port" != '' &&
-        remote_port_options="-p $prsync__remote_port"
+    local remote_port_options="${prsync__remote_port:+-p $prsync__remote_port}"
 
     # Warning: 'local' counts as a command for the purposes of $?,
     #          whereas pure variable assignment does not.
@@ -20,10 +18,7 @@ function prsync__get_remote_env {
 
 # To be used by profiles
 function prsync__get_remote_files {
-    local remote_port_options=''
-    test "$prsync__remote_port" != '' &&
-        remote_port_options="-P $prsync__remote_port"
-
+    local remote_port_options="${prsync__remote_port:+-P $prsync__remote_port}"
     scp -q $remote_port_options "$@"
     return $?
 }
@@ -168,10 +163,7 @@ function prsync {
     $dest_copy "$dest/$prsync__profiles_path/$profile"/dest-{in,ex}clude "$collated_profile_path/"
 
     # Generate options based on profile
-    local remote_options=''
-    test "$prsync__remote" != '' &&
-        remote_options="--partial"
-
+    local remote_options="${prsync__remote:+--partial}"
     local remote_port_options=''
     test "$prsync__remote_port" != '' &&
         # An array, because these shouldn't be IFS-split after variable expansion
