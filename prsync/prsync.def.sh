@@ -6,12 +6,10 @@ function prsync__get_remote_env {
     local remote_env_var="$1"
     local remote_env_val
 
-    local remote_port_options="${prsync__remote_port:+-p $prsync__remote_port}"
-
     # Warning: 'local' counts as a command for the purposes of $?,
     #          whereas pure variable assignment does not.
     local err="error: remote must be specified in the profile config to use \`prsync__get_remote_env\`"
-    remote_env_val="$(ssh $remote_port_options "${prsync__remote:?$err}" "env | grep '^$remote_env_var=' | sed 's/^$remote_env_var=//'")"
+    remote_env_val="$(ssh ${prsync__remote_port:+-p "$prsync__remote_port"} "${prsync__remote:?$err}" "env | grep '^$remote_env_var=' | sed 's/^$remote_env_var=//'")"
 
     local result="$?"
     printf '%s' "$remote_env_val"
@@ -21,8 +19,7 @@ function prsync__get_remote_env {
 # To be used by profiles
 # Also used below to fetch files from the remote profile, if there is one
 function prsync__get_remote_files_raw {
-    local remote_port_options="${prsync__remote_port:+-P $prsync__remote_port}"
-    scp -q $remote_port_options "$@"
+    scp -q ${prsync__remote_port:+-P "$prsync__remote_port"} "$@"
     return $?
 }
 
@@ -109,7 +106,7 @@ function prsync {
         case "$1" in
             'to' | 'from') direction="$1";;
             *)
-                printf "unrecognised value for 'direction' parameters: '%s'" "$1"
+                printf "unrecognised value for 'direction' parameter: '%s'" "$1"
                 return 1
                 ;;
         esac
@@ -195,8 +192,7 @@ function prsync {
     $dest_copy "$dest/$prsync__profiles_path/$profile"/dest-{in,ex}clude "$collated_profile_path/"
 
     # Generate options based on profile
-    local remote_options="${prsync__remote:+--partial}"
-    local remote_port_options=''
+    local remote_port_options=()
     test "$prsync__remote_port" != '' &&
         remote_port_options=('-e' "ssh -p $prsync__remote_port")
 
@@ -204,7 +200,7 @@ function prsync {
     rsync \
        $(test "$write_" = false && printf '%s' '-n') \
        `# Use arrays to avoid IFS-splitting after variable expansion` \
-       "${remote_options[@]}" "${remote_port_options[@]}" \
+       ${prsync__remote:+"--partial"} "${remote_port_options[@]}" \
        "${prsync__options[@]}" \
        --exclude-from="$collated_profile_path"/{src,dest}-exclude \
        --include-from="$collated_profile_path"/{src,dest}-include \
