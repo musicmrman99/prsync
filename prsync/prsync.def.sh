@@ -91,7 +91,11 @@ function prsync {
     fi
 
     if [ "$help" = true ]; then
-        cat "$prsync_dir/help/prsync.help.txt"
+        if [ "$(which mdless)" != ""]; then
+            mdless "$prsync_dir/README.md"
+        else
+            cat "$prsync_dir/README.md"
+        fi
         return 0
     fi
 
@@ -130,19 +134,11 @@ function prsync {
     local src dest
     local src_copy dest_copy
 
-    # Note: It's better to check for direction inside remote than to
-    #       check for remote inside direction for storing the copy
-    #       command, as this avoids double-checking the 'neither is
-    #       remote' case and keeps the 'remote-ness' of the src/dest
-    #       together with the command to use them. However, it
-    #       duplicates the logic of which directory (dir1/dir2) becomes
-    #       src/dest. Both require double-checking the inner case
-    #       (whether $direction or $prsync__remote_dirN).
-
     if [ "$prsync__remote_dir1" != '' -a "$prsync__remote_dir2" != '' ]; then
         # Both dir1 and dir2 being remote is an error - rsync can't do that
         printf '%s\n' "error: src and dest cannot both be remote"
         return 1
+
     elif [ "$prsync__remote_dir1" != '' ]; then
         err="error: remote must be specified in the profile config, as dir1 is remote"
         dir1="${prsync__remote:?$err}:$prsync__remote_dir1"
@@ -154,6 +150,7 @@ function prsync {
             'to') src_copy="prsync__get_remote_files_raw" && dest_copy="cp";;
             'from') src_copy="cp" && dest_copy="prsync__get_remote_files_raw";;
         esac
+
     elif [ "$prsync__remote_dir2" != '' ]; then
         err="error: dir1 must be specified in the profile config and not be remote, as dir2 is remote"
         dir1="${prsync__dir1:?$err}"
@@ -165,6 +162,7 @@ function prsync {
             'to') src_copy="cp" && dest_copy="prsync__get_remote_files_raw";;
             'from') src_copy="prsync__get_remote_files_raw" && dest_copy="cp";;
         esac
+
     else
         err="error: dir1 must be specified in the profile config"
         dir1="${prsync__dir1:?$err}"

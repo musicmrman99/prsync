@@ -22,62 +22,52 @@ prsync stores the paths to two directories (that I will call 'dir1' and 'dir2') 
 
 **Note**: When 'dir1' is a local directory and 'dir2' is a remote directory, `to` and `from` can be thought of as 'push' and 'pull' to/from the remote host.
 
-Your user's home directory, and the source and destination directories must all contain a `.prsync-profiles` directory and the given `<profile>` must be present in each of these directories:
+Your user's home directory, dir1 and dir2 must all contain a `.prsync-profiles` directory containing a subdirectory whose name matches the profile you give (the 'profile directory').
 
-- The profile in your home folder is given the role of the 'main profile' and must be a valid main profile
-- The profile in the source is given the role of the 'source profile' and must be a valid source profile
-- The profile in the destination is given the role of the 'destination profile' and must be a valid destination profile
+- The profile directory in your home directory (the 'home profile') must contain a file named `profile` that defines the variables set out in the "Config File" section below.
+- The profile directory in the source and destination directories (the 'source profile' and 'destination profile', respectively) may contain an `include` file and/or an `exclude` file. If an include file is not present, the entire directory's contents except the `.prsync-profiles` directory (if present) is included.
 
-A profile is a valid:
+**Notes**: The home, source and/or destination directories (and therefore profiles) may be the same directory. Also, the same directory could act as a source and a destination in different executions of `prsync`. For example, syncing your home directory both to and from a backup directory implies that the home and source profiles are the same directory when syncing to backup and the home and destination profiles are the same directory when syncing from backup. Therefore your home profile requires home, source, and destination profile files, while the backup requires both source and destination profile files.
 
-- 'main profile' if it contains a main config file named `profile` that defines the variables set out in the "Config File" section, below
-- 'source profile' if it contains the source include/exclude files (`src-include` and `src-exclude`)
-- 'destination profile' if it contains the destination include/exclude files (`dest-include` and `dest-exclude`)
+When you run `prsync`, it reads the config file in the home profile, retrieves the include/exclude files from the source profile, retrieves the include/exclude files from the destination profile, then runs `rsync` with the collated information. Note that excludes are matched first, then includes, then anything that hasn't yet matched is excluded from the sync. This means the source's exclude can override the destination's include and the destination's exclude can override the source's include.
 
-**Note**: It is possible for the same directory to be valid for more than one profile role. The same directory could act as a source and a destination profile in different executions of `prsync` if the directory that contains the profile is synced both `to` and `from` using the same `<profile>`. Also, the same directory must act as both a main profile and a source *or* destination profile simultaneously when syncing from or to your home folder, respectively.
-
-When you run `prsync`, it reads the config file in the main profile, retrieves the source include/exclude files from the source profile, retrieves the destination include/exclude files from the destination profile, then runs `rsync` with the collated information. Note that excludes are matched first, then includes, then anything that hasn't yet matched is excluded from the sync. This means the source's exclude can override the destination's include and the destination's exclude can override the source's include.
-
-Any output of the sync (stdout only) is redirected into a log file in the folder given by `prsync__log_path`, which is `~/tmp` by default.
+Any output of the sync (stdout only) is redirected into a log file in the directory given by `prsync__log_path`, which is `~/tmp` by default.
 
 ### Example
 
 Commands:
 ```
-prsync --write to desktop-home--laptop-wsl-home
-prsync --write from desktop-home--laptop-wsl-home
+prsync --write to backup
+prsync --write from backup
 ```
 
-`~/.prsync-profiles/desktop-home--laptop-wsl-home/profile`:
+`/home/$USER/.prsync-profiles/backup/profile`:
 ```
-prsync__dir1="$HOME"
-
-prsync__remote='my-laptop'
-prsync__remote_port=2222
-prsync__remote_dir2="$(prsync__get_remote_env HOME)"
-
-prsync__options=(-rlKtOJiv --delete --sparse --human-readable)
+prsync__dir1="/home/$USER"
+prsync__dir2="/mnt/backup/home/$USER"
+prsync__options=(-aiv --delete)
 ```
 
-Both of these:
-- `~/.prsync-profiles/desktop-home--laptop-wsl-home/src-include`
-- `~/.prsync-profiles/desktop-home--laptop-wsl-home/dest-include`
-
-Contain (for example):
+`/mnt/backup/home/$USER/.prsync-profiles/backup/exclude`:
 ```
-/Documents/
-/Documents/Blogging/***
+/Disk Images/***
 ```
 
-There are also two blank files:
-- `~/.prsync-profiles/desktop-home--laptop-wsl-home/src-exclude`
-- `~/.prsync-profiles/desktop-home--laptop-wsl-home/dest-exclude`
+`/home/$USER/.prsync-profiles/backup/include`:
+```
+/Documents/***
+/Music/***
+/Pictures/***
+/Videos/***
+```
 
-**Note**: The profile name `desktop-home--laptop-wsl-home` follows my naming convention of `dir1-description--dir2-description`, though `prsync` doesn't prescribe this.
+Due to absence, these files are assumed to be empty:
+- `/home/$USER/.prsync-profiles/backup/exclude` (nothing in home is explicitly excluded, though everything not included is implicitly excluded)
+- `/mnt/backup/home/$USER/.prsync-profiles/backup/include` (everything in backup is included, except what has already been excluded)
 
 ## Config File
 
-The primary config file in each 'main profile' (named `profile`) must define the following variables:
+The primary config file in each home profile (named `profile`) must define the following variables:
 
 - The directories:
   - `prsync__dir1` / `prsync__remote_dir1`: The path to the first directory ('dir1') must be given in *one* of these.
@@ -93,7 +83,7 @@ The primary config file in each 'main profile' (named `profile`) must define the
 - `rsync` options (optional):
   - `prsync__options`: An array of options to pass to `rsync`, eg. `(-a)` or `(-rlKtOJiv --delete --sparse --human-readable)`. The default is no options.
 
-**Note**: The `profile` config is sourced by the shell, so variables may be assigned by executing commands in a subshell (using `` `command` `` or `$(command)` syntax). There is also a small set of utility functions available to the config file that both respond to variables already defined in the file:
+**Note**: The `profile` config is sourced by the shell, so variables may be assigned by executing commands in a subshell (or using any other shell feature). There is also a small set of utility functions available to the config file that respond to variables already defined in the file at the point at which they are called:
 
 - `prsync__get_remote_env <name>`
       
