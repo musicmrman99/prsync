@@ -210,6 +210,11 @@ function prsync {
         printf '' > "$collated_profile_path/dest-exclude"
     fi
 
+    # Update timestamp in destination profile if writing
+    if [ "$write_" = true ]; then
+        echo "$(date -Is)" > "$dest/$prsync__profiles_path/$profile/last-write"
+    fi
+
     # Generate options based on profile
     local remote_port_options=()
     test "$prsync__remote_port" != '' &&
