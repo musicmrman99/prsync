@@ -190,7 +190,7 @@ function prsync {
 
     $src_copy "$src/$prsync__profiles_path/$profile/include" "$collated_profile_path/src-include" 2>/dev/null
     if [ $? != 0 ]; then
-        find "$src" -mindepth 1 -path "$src/.prsync-profiles" -prune -o -print 2>> "$direction - $profile_flat.log" |
+        find "$src" -mindepth 1 -path "$src/.prsync-profiles" -prune -o -print 2>> "$prsync__log_path/$direction - $profile_flat.log" |
             cut -c "$(($(printf '%s' "$src" | wc -c) + 1))"- \
             > "$collated_profile_path/src-include"
     fi
@@ -202,7 +202,7 @@ function prsync {
 
     $dest_copy "$dest/$prsync__profiles_path/$profile/include" "$collated_profile_path/dest-include" 2>/dev/null
     if [ $? != 0 ]; then
-        find "$dest" -mindepth 1 -path "$dest/.prsync-profiles" -prune -o -print 2>> "$direction - $profile_flat.log" |
+        find "$dest" -mindepth 1 -path "$dest/.prsync-profiles" -prune -o -print 2>> "$prsync__log_path/$direction - $profile_flat.log" |
             cut -c "$(($(printf '%s' "$dest" | wc -c) + 1))"- \
             > "$collated_profile_path/dest-include"
     fi
@@ -233,5 +233,5 @@ function prsync {
         --exclude='*' \
         {"$src","$dest"}/ \
         1> "$prsync__log_path/$direction - $profile_flat.txt" \
-        2>> "$direction - $profile_flat.log"
+        2>> "$prsync__log_path/$direction - $profile_flat.log"
 }
