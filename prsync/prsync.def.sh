@@ -62,7 +62,7 @@ function prsync__print {
     printf "${color_seq}${format}${normal_seq}" "$@"
 }
 
-# Utils
+# Profile Utils
 # --------------------------------------------------
 
 # To be used by profiles
@@ -104,20 +104,59 @@ function prsync__get_remote_files {
     return $?
 }
 
-# Reset all variables that can be set in a prsync profile to *blank*
-function prsync__unset_profile_vars {
-    unset prsync__remote
-    unset prsync__remote_port
-
+# Unset all variables that could be defined by prsync__load_profiles
+function prsync__unload_active_profile {
+    unset prsync__options
     unset prsync__dir1
     unset prsync__dir2
     unset prsync__remote_dir1
     unset prsync__remote_dir2
-
-    unset prsync__options
+    unset prsync__remote
+    unset prsync__remote_port
+    unset prsync__final_dir1
+    unset prsync__final_dir2
 }
 
-# Actions
+# Load a prsync profile (defines some combination of the variables listed above)
+function prsync__load_profile {
+    local profile="$1"; shift
+
+    prsync__unload_active_profile
+    .  "$HOME/$prsync__profiles_path/$profile/profile"
+
+    # Used to store error messages for unset/null parameter expansion
+    local err
+
+    # Verify the configuration and extract variables
+    if [ "$prsync__remote_dir1" != '' -a "$prsync__remote_dir2" != '' ]; then
+        # Both dir1 and dir2 being remote is an error - rsync can't do that
+        printf '%s\n' "error: src and dest cannot both be remote"
+        return 1
+
+    elif [ "$prsync__remote_dir1" != '' ]; then
+        err="error: remote must be specified in the profile config, as dir1 is remote"
+        prsync__final_dir1="${prsync__remote:?$err}:$prsync__remote_dir1"
+
+        err="error: dir2 must be specified in the profile config and not be remote, as dir1 is remote"
+        prsync__final_dir2="${prsync__dir2:?$err}"
+
+    elif [ "$prsync__remote_dir2" != '' ]; then
+        err="error: dir1 must be specified in the profile config and not be remote, as dir2 is remote"
+        prsync__final_dir1="${prsync__dir1:?$err}"
+
+        err="error: remote must be specified in the profile config, as dir1 is remote"
+        prsync__final_dir2="${prsync__remote:?$err}:$prsync__remote_dir2"
+
+    else
+        err="error: dir1 must be specified in the profile config"
+        prsync__final_dir1="${prsync__dir1:?$err}"
+
+        err="error: dir2 must be specified in the profile config"
+        prsync__final_dir2="${prsync__dir2:?$err}"
+    fi
+}
+
+# Actions / Sub-Commands
 # --------------------------------------------------
 
 function prsync__help {
@@ -136,6 +175,7 @@ function prsync__list {
 
     local profile
     while IFS= read -r -d $'\0' profile; do
+        # Output Profile
         local leading="$(printf '%s' "$profile" | rev | cut -d '/' -f 2- | rev)"
         local last="$(printf '%s' "$profile" | rev | cut -d '/' -f 1 | rev)"
 
@@ -144,27 +184,29 @@ function prsync__list {
         fi
         prsync__print 'blue' true '%s\n' "$last"
 
-    done < <( # Process substitution based on https://stackoverflow.com/a/8677566
+        if [ "$verbose" = true ]; then
+            # Output Profile Endpoints & Options
+            prsync__load_profile "$profile" # Source it to get the path, not the code
+            prsync__print 'white' false \
+                '    %s\n      V | %s\n    %s\n\n' \
+                "$prsync__final_dir1" "${prsync__options[*]}" "$prsync__final_dir2"
+        fi
+
+    done < <( # Process substitution
         find "$HOME/$prsync__profiles_path" -name 'profile' -print0 |
+        sort -z |
         xargs -0 -I{} sh -c "printf '%s\0' \"\$(
             dirname {} |
             cut -c $(($(printf '%s' "$HOME/$prsync__profiles_path" | wc -c) + 2))-
-        )\"" |
-        sort -z
+        )\""
     )
 }
 
 function prsync__sync {
     local write_="$1"; shift
 
-    # Used throughout to store error messages for unset/null parameter expansion
-    local err
-
     # Get positional params: sync direction, profile to use
     local direction
-    local profile
-    local profile_flat
-
     if [ "$1" = '' ]; then
         printf 'error: no direction given\n'
         return 1
@@ -178,6 +220,8 @@ function prsync__sync {
         esac
     fi
 
+    local profile
+    local profile_flat
     if [ "$1" = '' ]; then
         printf 'error: no profile given\n'
         return 1
@@ -186,58 +230,32 @@ function prsync__sync {
         profile_flat="$(printf '%s' "$profile" | sed -e 's#/#_#g')"
     fi
 
-    # Load profile from your home profiles (which may or may not be your
-    # dir1's or dir2's profiles)
-    prsync__unset_profile_vars
-    . "$HOME/$prsync__profiles_path/$profile/profile"
+    # Load profile
+    prsync__load_profile "$profile"
 
-    # Verify the configuration and extract variables
+    # Determine source & dest directories and how to get profiles from them
     local src dest
+    if [ "$direction" = 'to' ]; then
+        src="$prsync__final_dir1" && dest="$prsync__final_dir2"
+    else
+        src="$prsync__final_dir2" && dest="$prsync__final_dir1"
+    fi
+
     local src_copy dest_copy
-
-    if [ "$prsync__remote_dir1" != '' -a "$prsync__remote_dir2" != '' ]; then
-        # Both dir1 and dir2 being remote is an error - rsync can't do that
-        printf '%s\n' "error: src and dest cannot both be remote"
-        return 1
-
-    elif [ "$prsync__remote_dir1" != '' ]; then
-        err="error: remote must be specified in the profile config, as dir1 is remote"
-        dir1="${prsync__remote:?$err}:$prsync__remote_dir1"
-
-        err="error: dir2 must be specified in the profile config and not be remote, as dir1 is remote"
-        dir2="${prsync__dir2:?$err}"
-
+    if [ "$prsync__remote_dir1" != '' ]; then
         case "$direction" in
             'to') src_copy="prsync__get_remote_files_raw" && dest_copy="cp";;
             'from') src_copy="cp" && dest_copy="prsync__get_remote_files_raw";;
         esac
 
     elif [ "$prsync__remote_dir2" != '' ]; then
-        err="error: dir1 must be specified in the profile config and not be remote, as dir2 is remote"
-        dir1="${prsync__dir1:?$err}"
-
-        err="error: remote must be specified in the profile config, as dir1 is remote"
-        dir2="${prsync__remote:?$err}:$prsync__remote_dir2"
-
         case "$direction" in
             'to') src_copy="cp" && dest_copy="prsync__get_remote_files_raw";;
             'from') src_copy="prsync__get_remote_files_raw" && dest_copy="cp";;
         esac
 
     else
-        err="error: dir1 must be specified in the profile config"
-        dir1="${prsync__dir1:?$err}"
-
-        err="error: dir2 must be specified in the profile config"
-        dir2="${prsync__dir2:?$err}"
-
         src_copy="cp" && dest_copy="cp"
-    fi
-
-    if [ "$direction" = 'to' ]; then
-        src="$dir1" && dest="$dir2"
-    else
-        src="$dir2" && dest="$dir1"
     fi
 
     # Retrieve src and dest rsync include/exclude files from their respective profiles
@@ -276,7 +294,7 @@ function prsync__sync {
         echo "$(date -Is)" > "$dest/$prsync__profiles_path/$profile/last-write"
     fi
 
-    # Generate options based on profile
+    # Generate additional rsync options based on profile
     local remote_port_options=()
     test "$prsync__remote_port" != '' &&
         remote_port_options=('-e' "ssh -p $prsync__remote_port")
