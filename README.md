@@ -21,7 +21,7 @@ prsync write (to | from) <profile>
   Show this help text.
 
 - `prsync (list | --list | -l) [verbose | --verbose | -v]`
-  Lists all available profiles. If `verbose` is specified, then for each profile, also print the two directories it syncs and it's sync options.
+  Lists all available profiles. If `verbose` is specified, then for each profile, also print the two directories it syncs and its sync options.
 
 - `prsync (preview | --preview | -p) (to | from) <profile>`
 - `prsync (write | --write | -w) (to | from) <profile>`
