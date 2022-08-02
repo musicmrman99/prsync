@@ -81,8 +81,8 @@ The `profile` file in each profile must define the following variables:
 
 Commands:
 ```sh
-prsync --write to backup
-prsync --write from backup
+prsync write to backup
+prsync write from backup
 ```
 
 `/home/$USER/.prsync-profiles/backup/profile`:
