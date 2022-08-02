@@ -1,5 +1,69 @@
 prsync__profiles_path=".prsync-profiles"
 prsync__log_path="$HOME/tmp"
+prsync__color="color"
+
+# Basic I/O
+# --------------------------------------------------
+
+# Adapted from https://github.com/musicmrman99/bashctl/blob/master/bashctl/helpers.def.sh
+
+# signature: bashctl__print_color_escape [color] [bold] [raw]
+function prsync__print_color_escape {
+    local color="$1"; shift
+    local bold="$1"; shift
+    local raw="$1"; shift
+
+    local color_string='0'
+    case "$color" in
+        'black') color_string='30';;
+        'red') color_string='31';;
+        'green') color_string='32';;
+        'orange') color_string='33';;
+        'blue') color_string='34';;
+        'magenta') color_string='35';;
+        'turquoise') color_string='36';;
+        'white') color_string='37';;
+    esac
+
+    local bold_string=''
+    if [ "$bold" = 'bold' ]; then bold_string='01;'; fi
+
+    local raw_string=''
+    if [ "$raw" = 'bold' ]; then raw_string='\\\'; fi
+
+    printf '%s' "${raw_string}\033[${bold_string}${color_string}m"
+}
+
+# signature: prsync__print color bold format [object [...]]
+function prsync__print {
+    local color="$1"; shift
+    local bold="$1"; shift
+    local format="$1"; shift
+
+    local color_seq
+    local normal_seq
+    case "$prsync__color" in
+        'color')
+            color_seq="$(bashctl__print_color_escape "$color" "$bold" false >&1)"
+            normal_seq="$(bashctl__print_color_escape 'normal')"
+            ;;
+
+        'rawcolor')
+            color_seq="$(bashctl__print_color_escape "$color" "$bold" true >&1)"
+            normal_seq="$(bashctl__print_color_escape 'normal')"
+            ;;
+
+        'plain')
+            color_seq=''
+            normal_seq=''
+            ;;
+    esac
+
+    printf "${color_seq}${format}${normal_seq}" "$@"
+}
+
+# Utils
+# --------------------------------------------------
 
 # To be used by profiles
 function prsync__get_remote_env {
@@ -53,51 +117,48 @@ function prsync__unset_profile_vars {
     unset prsync__options
 }
 
-# # 'profile rsync'
-function prsync {
-    # The following is a modified version of this: http://stackoverflow.com/a/246128
-    local prsync_source
-    local prsync_dir
+# Actions
+# --------------------------------------------------
 
-    prsync_source="${BASH_SOURCE[0]}"
+function prsync__help {
+    if command -v mdless &> /dev/null; then
+        mdless "$prsync_dir/help/README.md"
+    else
+        less "$prsync_dir/help/README.md"
+    fi
+}
 
-    # resolve $prsync_source until the file is no longer a symlink
-    while [ -h "$prsync_source" ]; do
-        prsync_dir="$(cd -P "$( dirname "$prsync_source" )" && pwd)"
-        prsync_source="$(readlink "$prsync_source")"
+function prsync__list {
+    local verbose=false
+    case "$1" in
+        'verbose' | '--verbose' | '-v') shift; verbose=true;;
+    esac
 
-        # if $prsync_source was a relative symlink, we need to resolve it relative to the path where the symlink file was located
-        [[ $prsync_source != /* ]] && prsync_source="$prsync_dir/$prsync_source"
-    done
-    prsync_dir="$(cd -P "$( dirname "$prsync_source" )" && pwd)"
+    local profile
+    while IFS= read -r -d $'\0' profile; do
+        local leading="$(printf '%s' "$profile" | rev | cut -d '/' -f 2- | rev)"
+        local last="$(printf '%s' "$profile" | rev | cut -d '/' -f 1 | rev)"
 
-    # ------------------------------------------------------------
+        if [ "$leading" != "$last" ]; then
+            prsync__print 'turquoise' false '%s' "$leading/"
+        fi
+        prsync__print 'blue' true '%s\n' "$last"
+
+    done < <( # Process substitution based on https://stackoverflow.com/a/8677566
+        find "$HOME/$prsync__profiles_path" -name 'profile' -print0 |
+        xargs -0 -I{} sh -c "printf '%s\0' \"\$(
+            dirname {} |
+            cut -c $(($(printf '%s' "$HOME/$prsync__profiles_path" | wc -c) + 2))-
+        )\"" |
+        sort -z
+    )
+}
+
+function prsync__sync {
+    local write_="$1"; shift
 
     # Used throughout to store error messages for unset/null parameter expansion
     local err
-
-    # Options
-    local help=false
-    local write_=false # Do not write by default (`rsync -n` is default)
-
-    if [ "$(printf '%s' "$1" | head -c 1)" = '-' ]; then
-        case "$1" in
-            '-h' | '-?' | '--help') help=true; shift;;
-            '-w' | '--write') write_=true; shift;;
-            *)
-                printf "unrecognised option: '%s'\n" "$1"
-                return 1;;
-        esac
-    fi
-
-    if [ "$help" = true ]; then
-        if [ "$(which mdless)" != ""]; then
-            mdless "$prsync_dir/README.md"
-        else
-            cat "$prsync_dir/README.md"
-        fi
-        return 0
-    fi
 
     # Get positional params: sync direction, profile to use
     local direction
@@ -109,22 +170,20 @@ function prsync {
         return 1
     else
         case "$1" in
-            'to' | 'from') direction="$1";;
+            'to' | 'from') direction="$1"; shift;;
             *)
                 printf "unrecognised value for 'direction' parameter: '%s'" "$1"
                 return 1
                 ;;
         esac
-        shift
     fi
 
     if [ "$1" = '' ]; then
         printf 'error: no profile given\n'
         return 1
     else
-        profile="$1"
+        profile="$1"; shift
         profile_flat="$(printf '%s' "$profile" | sed -e 's#/#_#g')"
-        shift
     fi
 
     # Load profile from your home profiles (which may or may not be your
@@ -234,4 +293,39 @@ function prsync {
         {"$src","$dest"}/ \
         1> "$prsync__log_path/$direction - $profile_flat.txt" \
         2>> "$prsync__log_path/$direction - $profile_flat.log"
+}
+
+# Switchboard
+# --------------------------------------------------
+
+# 'profile rsync'
+function prsync {
+    # The following is a modified version of this: http://stackoverflow.com/a/246128
+    local prsync_source
+    local prsync_dir
+
+    prsync_source="${BASH_SOURCE[0]}"
+
+    # resolve $prsync_source until the file is no longer a symlink
+    while [ -h "$prsync_source" ]; do
+        prsync_dir="$(cd -P "$( dirname "$prsync_source" )" && pwd)"
+        prsync_source="$(readlink "$prsync_source")"
+
+        # if $prsync_source was a relative symlink, we need to resolve it relative to the path where the symlink file was located
+        [[ $prsync_source != /* ]] && prsync_source="$prsync_dir/$prsync_source"
+    done
+    prsync_dir="$(cd -P "$( dirname "$prsync_source" )" && pwd)"
+
+    # ------------------------------------------------------------
+
+    local action="$1"; shift
+    case "$action" in
+        'help'    | '--help'    | '-h' | '-?') prsync__help "$@";;
+        'list'    | '--list'    | '-l') prsync__list "$@";;
+        'preview' | '--preview' | '-p') prsync__sync false "$@";;
+        'write'   | '--write'   | '-w') prsync__sync true "$@";;
+        *)
+            printf "unrecognised action: '%s'\n" "$action"
+            return 1;;
+    esac
 }
