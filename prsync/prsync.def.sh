@@ -291,7 +291,8 @@ function prsync__sync {
 
     # Update timestamp in destination profile if writing
     if [ "$write_" = true ]; then
-        echo "$(date -Is)" > "$dest/$prsync__profiles_path/$profile/last-write"
+        echo "$(date -Is)" > /tmp/prsync__last-write
+        $dest_copy /tmp/prsync__last-write "$dest/$prsync__profiles_path/$profile/last-write"
     fi
 
     # Generate additional rsync options based on profile
