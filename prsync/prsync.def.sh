@@ -193,7 +193,7 @@ function prsync__list {
         fi
 
     done < <( # Process substitution
-        find "$HOME/$prsync__profiles_path" -name 'profile' -print0 |
+        find "$HOME/$prsync__profiles_path/" -name 'profile' -print0 |
         sort -z |
         xargs -0 -I{} sh -c "printf '%s\0' \"\$(
             dirname {} |
