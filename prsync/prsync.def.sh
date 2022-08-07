@@ -256,6 +256,9 @@ function prsync__sync {
         src_copy="cp" && dest_copy="cp"
     fi
 
+    # Create/clear log file for this profile
+    printf '' > "$prsync__log_path/$direction - $profile_flat.log"
+
     # Retrieve src and dest rsync include/exclude files from their respective profiles
     local collated_profile_path="$HOME/$prsync__profiles_path/$profile/collated-profile"
 
