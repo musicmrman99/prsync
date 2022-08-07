@@ -81,7 +81,15 @@ function prsync__get_remote_env {
 # To be used by profiles
 # Also used below to fetch files from the remote profile, if there is one
 function prsync__get_remote_files_raw {
-    scp -q ${prsync__remote_port:+-P "$prsync__remote_port"} "$@"
+    # "${@@Q}" (https://stackoverflow.com/a/12985353) doesn't work with scp
+    # due to https://stackoverflow.com/a/54599326. `scp -T` is less safe (see
+    # 2nd link), so iterate and printf-escape (Bash 4.0+) each param.
+    local args=()
+    for ((i = 1; i <= ${#@}; i++)); do
+        args[i]="$(printf '%q' "${!i}")"
+    done
+
+    scp -q ${prsync__remote_port:+-P "$prsync__remote_port"} "${args[@]}"
     return $?
 }
 
@@ -91,7 +99,7 @@ function prsync__get_remote_files {
     # Notes:
     # - slicing an array: https://stackoverflow.com/a/1336245
     # - slicing the positional parameter arrays ($* and $@) does not require @-indexing the array (from a comment on the above)
-    # - experimentation: when run, "${@::N}" (where N is some number) returns 'bash' as the first param - exclude it
+    # - experimentation: $@ includes '-bash' as the first element (index 0) - exclude it
     local all_but_last=("${@:1:${#@}-1}")
 
     local err="error: remote must be specified in the profile config to use \`prsync__get_remote_env\`"
@@ -310,7 +318,7 @@ function prsync__sync {
         --exclude-from="$collated_profile_path"/{src,dest}-exclude \
         --include-from="$collated_profile_path"/{src,dest}-include \
         --exclude='*' \
-        {"$src","$dest"}/ \
+        "$(printf '%q' "$src")/" "$(printf '%q' "$dest")/" \
         1> "$prsync__log_path/$direction - $profile_flat.txt" \
         2>> "$prsync__log_path/$direction - $profile_flat.log"
 }
