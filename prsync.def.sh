@@ -8,7 +8,7 @@ prsync__color="color"
 # Adapted from:
 #   https://github.com/musicmrman99/bashctl/blob/master/bashctl/helpers.def.sh
 
-# signature: bashctl__print_color_escape [color] [bold] [raw]
+# signature: prsync__print_color_escape [color] [bold] [raw]
 function prsync__print_color_escape {
     local color="$1"; shift
     local bold="$1"; shift
@@ -45,13 +45,13 @@ function prsync__print {
     local normal_seq
     case "$prsync__color" in
         'color')
-            color_seq="$(bashctl__print_color_escape "$color" "$bold" false >&1)"
-            normal_seq="$(bashctl__print_color_escape 'normal')"
+            color_seq="$(prsync__print_color_escape "$color" "$bold" false >&1)"
+            normal_seq="$(prsync__print_color_escape 'normal')"
             ;;
 
         'rawcolor')
-            color_seq="$(bashctl__print_color_escape "$color" "$bold" true >&1)"
-            normal_seq="$(bashctl__print_color_escape 'normal')"
+            color_seq="$(prsync__print_color_escape "$color" "$bold" true >&1)"
+            normal_seq="$(prsync__print_color_escape 'normal')"
             ;;
 
         'plain')
@@ -134,7 +134,7 @@ function prsync__get_target {
 # - dest is the local directory to copy the files to.
 function prsync__get_files {
     local remote="$1"; shift
-    
+
     # Exclude the 0th parameter (which is always '-bash') and last parameter
     # (which is the destination path, and is expected to be local, so doesn't
     # require escaping)
@@ -287,9 +287,9 @@ function prsync__load_profile {
 
 function prsync__help {
     if command -v mdless &> /dev/null; then
-        mdless "$prsync_dir/help/README.md"
+        mdless "$prsync_dir/README.md"
     else
-        less "$prsync_dir/help/README.md"
+        less "$prsync_dir/README.md"
     fi
 }
 
