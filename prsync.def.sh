@@ -66,6 +66,12 @@ function prsync__print {
 # Profile Utils
 # --------------------------------------------------
 
+function prsync__list_profiles {
+    find "$HOME/$prsync__profiles_path/" -name 'profile' |
+    sort |
+    xargs -I{} sh -c "dirname {} | cut -c $(($(printf '%s' "$HOME/$prsync__profiles_path" | wc -c) + 2))-"
+}
+
 # Syntax: prsync__get_remote_env <remote_env_var>
 # Outputs the value of the variable given in <remote_env_var> on the host in
 # prsync__remote (connecting on the port in prsync__remote_port).
@@ -300,7 +306,7 @@ function prsync__list {
     esac
 
     local profile
-    while IFS= read -r -d $'\0' profile; do
+    while IFS= read -r profile; do
         # Output Profile
         local leading="$(printf '%s' "$profile" | rev | cut -d '/' -f 2- | rev)"
         local last="$(printf '%s' "$profile" | rev | cut -d '/' -f 1 | rev)"
@@ -319,15 +325,7 @@ function prsync__list {
                 "${prsync__options[*]}" \
                 "$(prsync__get_target "$prsync__dir2_remote" "$prsync__dir2" false)"
         fi
-
-    done < <( # Process substitution
-        find "$HOME/$prsync__profiles_path/" -name 'profile' -print0 |
-        sort -z |
-        xargs -0 -I{} sh -c "printf '%s\0' \"\$(
-            dirname {} |
-            cut -c $(($(printf '%s' "$HOME/$prsync__profiles_path" | wc -c) + 2))-
-        )\""
-    )
+    done < <(prsync__list_profiles)
 }
 
 function prsync__sync {
@@ -342,121 +340,129 @@ function prsync__sync {
         case "$1" in
             'to' | 'from') direction="$1"; shift;;
             *)
-                printf "unrecognised value for 'direction' parameter: '%s'" "$1"
+                printf "unrecognised value for 'direction' parameter: '%s'\n" "$1"
                 return 1
                 ;;
         esac
     fi
 
-    local profile
-    local profile_flat
+    local profile_list
     if [ "$1" = '' ]; then
         printf 'error: no profile given\n'
         return 1
+    elif [ "$1" = '--all' -o "$1" = '-a' ]; then
+        profile_list="$(prsync__list_profiles)"
     else
-        profile="$1"; shift
+        profile_list="$(printf '%s\n' "$@")"
+    fi
+    shift
+
+    local profile
+    local profile_flat
+    while IFS= read -r profile; do
         profile_flat="$(printf '%s' "$profile" | sed -e 's#/#_#g')"
-    fi
+        prsync__print 'white' false 'Syncing: %s\n' "$profile"
 
-    # Load profile
-    prsync__load_profile "$profile"
+        # Load profile
+        prsync__load_profile "$profile"
 
-    # Determine source & dest directories and how to get profiles from them
-    local src dest src_remote dest_remote
-    case "$direction" in
-        'to')
-            src="$prsync__dir1" && src_remote="$prsync__dir1_remote"
-            dest="$prsync__dir2" && dest_remote="$prsync__dir2_remote"
-            ;;
+        # Determine source & dest directories and how to get profiles from them
+        local src dest src_remote dest_remote
+        case "$direction" in
+            'to')
+                src="$prsync__dir1" && src_remote="$prsync__dir1_remote"
+                dest="$prsync__dir2" && dest_remote="$prsync__dir2_remote"
+                ;;
 
-        'from')
-            src="$prsync__dir2" && src_remote="$prsync__dir2_remote"
-            dest="$prsync__dir1" && dest_remote="$prsync__dir1_remote"
-            ;;
-    esac
+            'from')
+                src="$prsync__dir2" && src_remote="$prsync__dir2_remote"
+                dest="$prsync__dir1" && dest_remote="$prsync__dir1_remote"
+                ;;
+        esac
 
-    # Create/clear log file for this profile
-    printf '' > "$prsync__log_path/$direction - $profile_flat.log"
+        # Create/clear log file for this profile
+        printf '' > "$prsync__log_path/$direction - $profile_flat.log"
 
-    # Retrieve src and dest rsync include/exclude files from their respective
-    # profiles
-    local collated_profile_path="$HOME/$prsync__profiles_path/$profile/collated-profile"
+        # Retrieve src and dest rsync include/exclude files from their respective
+        # profiles
+        local collated_profile_path="$HOME/$prsync__profiles_path/$profile/collated-profile"
 
-    test ! -d "$collated_profile_path" &&
-        mkdir "$collated_profile_path" ||
-        rm "$collated_profile_path"/*
+        test ! -d "$collated_profile_path" &&
+            mkdir "$collated_profile_path" ||
+            rm "$collated_profile_path"/*
 
-    prsync__get_files "$src_remote" \
-        "$src/$prsync__profiles_path/$profile/include" \
-        "$collated_profile_path/src-include" \
-        2>/dev/null
-    if [ $? != 0 ]; then
-        prsync__find "$src_remote" \
-            "$src" \
-            -mindepth 1 \
-            -path "$src/$prsync__profiles_path" -prune \
-            -o -print \
-            2>> "$prsync__log_path/$direction - $profile_flat.log" \
-            | cut -c "$(($(printf '%s' "$src" | wc -c) + 1))"- \
-            > "$collated_profile_path/src-include"
-    fi
+        prsync__get_files "$src_remote" \
+            "$src/$prsync__profiles_path/$profile/include" \
+            "$collated_profile_path/src-include" \
+            2>/dev/null
+        if [ $? != 0 ]; then
+            prsync__find "$src_remote" \
+                "$src" \
+                -mindepth 1 \
+                -path "$src/$prsync__profiles_path" -prune \
+                -o -print \
+                2>> "$prsync__log_path/$direction - $profile_flat.log" \
+                | cut -c "$(($(printf '%s' "$src" | wc -c) + 1))"- \
+                > "$collated_profile_path/src-include"
+        fi
 
-    prsync__get_files "$src_remote" \
-        "$src/$prsync__profiles_path/$profile/exclude" \
-        "$collated_profile_path/src-exclude" \
-        2>/dev/null
-    if [ $? != 0 ]; then
-        printf '' > "$collated_profile_path/src-exclude"
-    fi
+        prsync__get_files "$src_remote" \
+            "$src/$prsync__profiles_path/$profile/exclude" \
+            "$collated_profile_path/src-exclude" \
+            2>/dev/null
+        if [ $? != 0 ]; then
+            printf '' > "$collated_profile_path/src-exclude"
+        fi
 
-    prsync__get_files "$dest_remote" \
-        "$dest/$prsync__profiles_path/$profile/include" \
-        "$collated_profile_path/dest-include" \
-        2>/dev/null
-    if [ $? != 0 ]; then
-        prsync__find "$dest_remote" \
-            "$dest" \
-            -mindepth 1 \
-            -path "$dest/$prsync__profiles_path" -prune \
-            -o -print \
-            2>> "$prsync__log_path/$direction - $profile_flat.log" \
-            | cut -c "$(($(printf '%s' "$dest" | wc -c) + 1))"- \
-            > "$collated_profile_path/dest-include"
-    fi
+        prsync__get_files "$dest_remote" \
+            "$dest/$prsync__profiles_path/$profile/include" \
+            "$collated_profile_path/dest-include" \
+            2>/dev/null
+        if [ $? != 0 ]; then
+            prsync__find "$dest_remote" \
+                "$dest" \
+                -mindepth 1 \
+                -path "$dest/$prsync__profiles_path" -prune \
+                -o -print \
+                2>> "$prsync__log_path/$direction - $profile_flat.log" \
+                | cut -c "$(($(printf '%s' "$dest" | wc -c) + 1))"- \
+                > "$collated_profile_path/dest-include"
+        fi
 
-    prsync__get_files "$dest_remote" \
-        "$dest/$prsync__profiles_path/$profile/exclude" \
-        "$collated_profile_path/dest-exclude" \
-        2>/dev/null
-    if [ $? != 0 ]; then
-        printf '' > "$collated_profile_path/dest-exclude"
-    fi
+        prsync__get_files "$dest_remote" \
+            "$dest/$prsync__profiles_path/$profile/exclude" \
+            "$collated_profile_path/dest-exclude" \
+            2>/dev/null
+        if [ $? != 0 ]; then
+            printf '' > "$collated_profile_path/dest-exclude"
+        fi
 
-    # Update timestamp in destination profile if writing
-    if [ "$write_" = true ]; then
-        echo "$(date -Is)" > /tmp/prsync__last-write
-        prsync__put_files "$dest_remote" \
-            /tmp/prsync__last-write \
-            "$dest/$prsync__profiles_path/$profile/last-write"
-    fi
+        # Update timestamp in destination profile if writing
+        if [ "$write_" = true ]; then
+            echo "$(date -Is)" > /tmp/prsync__last-write
+            prsync__put_files "$dest_remote" \
+                /tmp/prsync__last-write \
+                "$dest/$prsync__profiles_path/$profile/last-write"
+        fi
 
-    # Generate additional rsync options based on profile
-    local remote_port_options=()
-    test "$prsync__remote_port" != '' &&
-        remote_port_options=('-e' "ssh -p $prsync__remote_port")
+        # Generate additional rsync options based on profile
+        local remote_port_options=()
+        test "$prsync__remote_port" != '' &&
+            remote_port_options=('-e' "ssh -p $prsync__remote_port")
 
-    # Sync
-    rsync \
-        $(test "$write_" = false && printf '%s' '-n') \
-        ${prsync__remote:+"--partial"} "${remote_port_options[@]}" \
-        "${prsync__options[@]}" \
-        --exclude-from="$collated_profile_path"/{src,dest}-exclude \
-        --include-from="$collated_profile_path"/{src,dest}-include \
-        --exclude='*' \
-        "$(prsync__get_target "$src_remote" "$src/")" \
-        "$(prsync__get_target "$dest_remote" "$dest/")" \
-        1> "$prsync__log_path/$direction - $profile_flat.txt" \
-        2>> "$prsync__log_path/$direction - $profile_flat.log"
+        # Sync
+        rsync \
+            $(test "$write_" = false && printf '%s' '-n') \
+            ${prsync__remote:+"--partial"} "${remote_port_options[@]}" \
+            "${prsync__options[@]}" \
+            --exclude-from="$collated_profile_path"/{src,dest}-exclude \
+            --include-from="$collated_profile_path"/{src,dest}-include \
+            --exclude='*' \
+            "$(prsync__get_target "$src_remote" "$src/")" \
+            "$(prsync__get_target "$dest_remote" "$dest/")" \
+            1> "$prsync__log_path/$direction - $profile_flat.txt" \
+            2>> "$prsync__log_path/$direction - $profile_flat.log"
+    done <<<"$profile_list"
 }
 
 # Switchboard
@@ -486,12 +492,13 @@ function prsync {
 
     local action="$1"; shift
     case "$action" in
-        'help'    | '--help'    | '-h' | '-?') prsync__help "$@";;
-        'list'    | '--list'    | '-l') prsync__list "$@";;
-        'preview' | '--preview' | '-p') prsync__sync false "$@";;
-        'write'   | '--write'   | '-w') prsync__sync true "$@";;
+        'help'    | '--help'    | '-h' | '-?') prsync__help "$@" || return $? ;;
+        'list'    | '--list'    | '-l') prsync__list "$@" || return $? ;;
+        'preview' | '--preview' | '-p') prsync__sync false "$@" || return $? ;;
+        'write'   | '--write'   | '-w') prsync__sync true "$@" || return $? ;;
         *)
             printf "unrecognised action: '%s'\n" "$action"
-            return 1;;
+            return 1
+            ;;
     esac
 }

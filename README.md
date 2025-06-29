@@ -7,8 +7,8 @@
 ```sh
 prsync help
 prsync list [verbose]
-prsync preview (to | from) <profile>
-prsync write (to | from) <profile>
+prsync preview (to | from) (--all | <profiles...>)
+prsync write (to | from) (--all | <profiles...>)
 ```
 
 ## Description
@@ -23,19 +23,19 @@ prsync write (to | from) <profile>
 - `prsync (list | --list | -l) [verbose | --verbose | -v]`
   Lists all available profiles. If `verbose` is specified, then for each profile, also print the two directories it syncs and its sync options.
 
-- `prsync (preview | --preview | -p) (to | from) <profile>`
-- `prsync (write | --write | -w) (to | from) <profile>`
+- `prsync (preview | --preview | -p) (to | from) (--all | -a | <profiles...>)`
+- `prsync (write | --write | -w) (to | from) (--all | -a | <profiles...>)`
   Previews (`preview`) or performs (`write`) a file sync in the given direction, using the given profile.
 
   Arguments:
     `to` or `from` tells prsync whether to sync from dir1 to dir2 (`to`), or from dir2 to dir1 (`from`). In these docs, the directory being synced from is called the 'source' directory and the directory being synced to is called the 'destination' directory. Note that when dir1 is a local directory and dir2 is a remote directory, `to` and `from` can be thought of as 'push' and 'pull' to/from the remote host. This argument only matters when certain `rsync` options are specified in the profile, such as `--delete`, but it is required regardless (**TODO**).
 
-    `<profile>` specifies which profile to use. Profiles are referred to by their directory name, eg. `prsync -p to example-profile` would expect the file `$HOME/.prsync-profiles/example-profile/profile` to exist and define the relevant variables. This name includes any directories the profile is nested in below the profiles directory, eg. `prsync -p to example/nested-profile` would expect the file `$HOME/.prsync-profiles/example/nested-profile/profile`) to exist and define the relevant variables.
+    `<profiles...>` (at least one) specifies which profile(s) to use. Alternatively, `--all`/`-a` specifies to use all profiles (per the output of `prsync -l`). Profiles are referred to by their directory name, eg. `prsync -p to example-profile` would expect the file `$HOME/.prsync-profiles/example-profile/profile` to exist and define the relevant variables. This name includes any directories the profile is nested in below the profiles directory, eg. `prsync -p to example/nested-profile` would expect the file `$HOME/.prsync-profiles/example/nested-profile/profile`) to exist and define the relevant variables.
 
   Details:
-    Previewing the sync performs the same steps as performing the sync, except that no files are changed.
-    
-    dir1 and dir2 may each have a profiles directory (`.prsync-profiles`) containing the `<profile>` used, which may contain an `include` file and/or an `exclude` file that will be passed to the `--include-from` and `--exclude-from` options of `rsync` to determine the subset of files to consider in the sync (sync `man rsync` for details of the syntax of these files). For each side of the sync that omits an `include` file, `prsync` includes the entire contents of the directory for that side, except the profiles directory, if present. For each side that omits an `exclude` file, it is considered empty for that side. Using `rsync`'s "first match wins" rule, the `exclude` files are considered first, then the `include` files, then everything not matched is excluded. This mechanism has two important effects. First, the source's exclude can override the destination's include and the destination's exclude can override the source's include. Second, the effect that when all files are omitted (the 'default'), `prsync` works the same as `rsync` (except for omitting `prsync`'s own metadata files), but for each side that gives its `include` file, `prsync` assumes everything is excluded on that side unless explicitly included, which is the opposite way around to `rsync`, which assumes everything is included unless explicitly excluded. **These effects make syncs less error-prone**.
+    Previewing the sync performs the same steps as performing the sync, except that the files are not synced.
+
+    dir1 and dir2 may each have a profiles directory (`.prsync-profiles`) containing the profile used, which may contain an `include` file and/or an `exclude` file that will be passed to the `--include-from` and `--exclude-from` options of `rsync` to determine the subset of files to consider in the sync (see `man rsync` for details of the syntax of these files). For each side of the sync that omits an `include` file, `prsync` includes the entire contents of the directory for that side, except the profiles directory, if present. For each side that omits an `exclude` file, it is considered empty for that side. Using `rsync`'s "first match wins" rule, the `exclude` files are considered first, then the `include` files, then everything not matched is excluded. This mechanism has two important effects. First, the source's exclude can override the destination's include and the destination's exclude can override the source's include. Second, the effect that when all files are omitted (the 'default'), `prsync` works the same as `rsync` (except for omitting `prsync`'s own metadata files), but for each side that gives its `include` file, `prsync` assumes everything is excluded on that side unless explicitly included, which is the opposite way around to `rsync`, which assumes everything is included unless explicitly excluded. **These effects make syncs less error-prone**.
 
     All normal output of the sync is written to a text (`.txt`) file named the same as the given profile (with any directory separators replaced with underscores) in the directory given in the `prsync__log_path` variable, which is `~/tmp` by default. All error output of the sync is written to a log (`.log`) file with the same name in the same directory.
 
